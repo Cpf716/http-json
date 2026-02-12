@@ -85,7 +85,7 @@ namespace http {
                 value.push_back(trim_end(str));
 
             body = join(value, "\r\n");
-            body = body.substr(0, std::min((int)body.length(), content_length));
+            body = body.substr(0, std::min((int) body.length(), content_length));
         }
 
         return request(method, target, headers, body);

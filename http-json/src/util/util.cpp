@@ -109,7 +109,7 @@ bool is_pow(const size_t b, const size_t n) {
     
     int result = log(b) / log(n);
     
-    return (int)result - result == 0;
+    return (int) result - result == 0;
 }
 
 bool is_string(const std::string value)  {
@@ -276,7 +276,7 @@ std::string decode(const std::string string) {
 
 std::string encode(const std::string string) {
     size_t len = string.length() + 1;
-    char*  str = new char[pow2((int)len + 2)];
+    char*  str = new char[pow2((int) len + 2)];
     
     strcpy(str, string.c_str());
     
@@ -293,7 +293,7 @@ std::string encode(const std::string string) {
         if (str[i] == '\"') {
             // resize, if required
             if (is_pow(len + 2, 2)) {
-                char* tmp = new char[pow2((int)(len + 2) * 2)];
+                char* tmp = new char[pow2((int) (len + 2) * 2)];
 
                 for (size_t j = 0; j < len; j++)
                     tmp[j] = str[j];
@@ -347,7 +347,7 @@ std::vector<std::string> split(const std::string string, const std::string delim
     std::vector<std::string> result;
     size_t                   start = 0;
 
-    for (int end = 0; end <= (int)string.length() - (int)delimeter.length(); end++) {
+    for (int end = 0; end <= (int) string.length() - (int) delimeter.length(); end++) {
         size_t index = 0;
 
         while (index < delimeter.length() && string[end + index] == delimeter[index])
@@ -368,7 +368,7 @@ std::vector<std::string> split(const std::string string, const std::string delim
 void split(std::vector<std::string>& target, const std::string source, const std::string delimeter) {
     size_t start = 0;
 
-    for (int end = 0; end <= (int)source.length() - (int)delimeter.length(); end++) {
+    for (int end = 0; end <= (int) source.length() - (int) delimeter.length(); end++) {
         size_t index = 0;
 
         while (index < delimeter.length() && source[end + index] == delimeter[index])

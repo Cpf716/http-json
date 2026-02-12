@@ -111,7 +111,7 @@ namespace json {
         this->_index += value;
 
         if (this->_index > this->_size)
-            this->_index = (int)this->_size;
+            this->_index = (int) this->_size;
         else if (this->_index < 0)
             this->_index = 0;
 
@@ -140,7 +140,7 @@ namespace json {
         if (this->_index < 0)
             this->_index = 0;
         else if (this->_index > this->_size)
-            this->_index = (int)this->_size;
+            this->_index = (int) this->_size;
 
         return *this;
     }
@@ -172,7 +172,7 @@ namespace json {
     // Member Functions
 
     int object::_find(const std::string key) {
-        return this->_find(key, 0, (int)this->_key_map.size());
+        return this->_find(key, 0, (int) this->_key_map.size());
     }
 
     int object::_find(const std::string key, const int start, const int end) {
@@ -464,7 +464,7 @@ namespace json {
     }
 
     array::iterator array::end() {
-        return this->begin() + (int)this->size();
+        return this->begin() + (int) this->size();
     }
 
     void object::erase() {
@@ -593,7 +593,7 @@ namespace json {
     }
 
     json::array* array::slice(const int start) {
-        return this->slice(start, (int)this->size());
+        return this->slice(start, (int) this->size());
     }
 
     json::array* array::slice(int start, int end) {
@@ -612,7 +612,7 @@ namespace json {
             if (end < 0)
                 end = 0;
         } else if (end > this->size())
-            end = (int)this->size();
+            end = (int) this->size();
 
         for (int i = start; i < end; i++)
             result->set(this->get(i));
@@ -624,8 +624,8 @@ namespace json {
         int delete_count;
 
         if (start < 0) {
-            start += (int)this->size();
-            delete_count = (int)this->size();
+            start += (int) this->size();
+            delete_count = (int) this->size();
 
             if (start < 0)
                 start = 0;
@@ -634,7 +634,7 @@ namespace json {
         } else if (start >= this->size())
             delete_count = 0;
         else
-            delete_count = (int)this->size() - start;
+            delete_count = (int) this->size() - start;
 
         return this->_splice(start, delete_count, std::vector<object*>());
     }
@@ -648,8 +648,8 @@ namespace json {
             throw error("Operation not permitted");
 
         if (start < 0) {
-            start += (int)this->size();
-            delete_count = (int)this->size();
+            start += (int) this->size();
+            delete_count = (int) this->size();
 
             if (start < 0)
                 start = 0;
@@ -658,7 +658,7 @@ namespace json {
         } else if (start >= this->size())
             delete_count = 0;
         else if (start + delete_count > this->size())
-            delete_count = (int)this->size() - start;
+            delete_count = (int) this->size() - start;
 
         return this->_splice(start, delete_count, values);
     }

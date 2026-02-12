@@ -29,7 +29,7 @@ namespace mysocket {
         if (len == -1)
             throw mysocket::error(errno);
         
-        return (int)len;
+        return (int) len;
     }
 
     // Constructors
@@ -222,7 +222,7 @@ namespace mysocket {
         size_t len = floor((end - start) / 2);
         
         if (this->_connections[start + len] == connection)
-            return (int)(start + len);
+            return (int) (start + len);
         
         if (this->_connections[start + len] > connection)
             return this->_find_connection(connection, start, start + len);
@@ -345,7 +345,7 @@ namespace mysocket {
         if (len == -1)
             throw mysocket::error(errno);
         
-        return (int)len;
+        return (int) len;
     }
 
     const char* error::what() const throw() {
