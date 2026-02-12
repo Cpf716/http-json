@@ -31,6 +31,8 @@ bool                     is_number(const std::string value);
 
 bool                     is_pow(const size_t b, const size_t n);
 
+bool                     is_string(const std::string value);
+
 std::string              join(std::vector<std::string> values, std::string delimeter);
 
 /**
