@@ -112,7 +112,7 @@ bool is_pow(const size_t b, const size_t n) {
     return (int)result - result == 0;
 }
 
-bool is_string(const std::string value) {
+bool is_string(const std::string value)  {
     return value.length() >= 2 && value[0] == '\"' && value[value.length() - 1] == '\"';
 }
 

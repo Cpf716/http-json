@@ -10,14 +10,33 @@
 namespace http {
     // Non-Member Functions
 
-    std::map<size_t, std::string> error_codes() {
-        return {
-            { 0, "Unknown error" },
-            { 400, "Bad Request" },
-            { 401, "Unauthorized" },
-            { 404, "Not Found" },
-            { 500, "Internal Server Error"}
-        };
+    std::string strstatus(const status_code status) {
+        switch (status) {
+            case UNKNOWN_ERROR:
+                return "Unknown error";
+            case OK:
+                return "OK";
+            case NO_CONTENT:
+                return "No Content";
+            case FOUND:
+                return "Found";
+            case TEMPORARY_REDIRECT:
+                return "Temporary Redirect";
+            case PERMANENT_REDIRECT:
+                return "Permanent Redirect";
+            case BAD_REQUEST:
+                return "Bad Request";
+            case UNAUTHORIZED:
+                return "Unauthorized";
+            case NOT_FOUND:
+                return "Not Found";
+            case INTERNAL_SERVER_ERROR:
+                return "Internal Server Error";
+            default:
+                break;
+        }
+        
+        return "";
     }
 
     std::string http_version() {
@@ -26,14 +45,6 @@ namespace http {
 
     size_t timeout() {
         return 30;
-    }
-
-    std::map<int, std::string> redirect_codes() {
-        return {
-            { 302, "Found" },
-            { 307, "Temporary Redirect" },
-            { 308, "Permanent Redirect" }
-        };
     }
 
     request parse_request(const std::string message) {
@@ -48,12 +59,11 @@ namespace http {
 
         std::vector<std::string> tokens = ::tokens(str);
 
-        // Bad Request
         if (!(tokens.size() == 3 && tokens[2] == http_version()))
-            throw http::error(400);
+            throw http::error(BAD_REQUEST);
 
-        std::string method = tolowerstr(tokens[0]);
-        std::string target = tokens[1];
+        std::string method = tolowerstr(tokens[0]),
+                     target = tokens[1];
         header::map headers;
 
         while (getline(iss, str)) {
@@ -81,23 +91,23 @@ namespace http {
         return request(method, target, headers, body);
     }
 
-    std::string redirect(header::map& headers, const size_t status, const std::string location) {
+    std::string redirect(header::map& headers, const status_code status, const std::string location) {
         headers["Location"] = location;
 
-        std::string status_text = redirect_codes()[(int)status];
+        std::string status_text = strstatus(status);
 
         return response(status, status_text, status_text + ". Redirecting to " + location, headers);
     }
 
     std::string redirect(header::map& headers, const std::string location) {
-        return redirect(headers, 302, location);
+        return redirect(headers, FOUND, location);
     }
 
     std::string response(const std::string text, header::map headers) {
-        return response(200, "OK", text, headers);
+        return response(OK, strstatus(OK), text, headers);
     }
 
-    std::string response(const size_t status, const std::string status_text, const std::string text, header::map headers, const bool date) {
+    std::string response(const status_code status, const std::string status_text, const std::string text, header::map headers, const bool date) {
         std::ostringstream oss(http_version() + " ");
 
         oss.seekp(0, std::ios::end);
@@ -115,10 +125,10 @@ namespace http {
             oss << "Date" << ": ";
 
             std::string day = tokens[0],
-                        month = tokens[1],
-                        date = tokens[2],
-                        time = tokens[3],
-                        year = tokens[4];
+                         month = tokens[1],
+                         date = tokens[2],
+                         time = tokens[3],
+                         year = tokens[4];
 
             oss << day << ", " << date << " " << month << " " << year << " " << time << " GMT";
         }
@@ -130,6 +140,8 @@ namespace http {
         
         if (text.length()) {
             if (headers["Transfer-Encoding"].str().empty()) {
+                headers.erase("Transfer-Encoding");
+                
                 oss << "\r\n";
                 oss << "Content-Length: " << text.length();
             }
@@ -143,15 +155,15 @@ namespace http {
 
     // Constructors
 
-    error::error(const size_t status) {
+    error::error(const status_code status) {
         this->_status = status;
-        this->_status_text = error_codes()[this->status()];
+        this->_status_text = strstatus(static_cast<status_code>(this->status()));
         this->_text = "";
     }
 
-    error::error(const size_t status, const std::string text) {
+    error::error(const status_code status, const std::string text) {
         this->_status = status;
-        this->_status_text = error_codes()[this->status()];
+        this->_status_text = strstatus(static_cast<status_code>(this->status()));
         this->_text = text;
     }
 
@@ -304,7 +316,7 @@ namespace http {
         return this->_params;
     }
 
-    size_t error::status() const {
+    status_code error::status() const {
         return this->_status;
     }
 

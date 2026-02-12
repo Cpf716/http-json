@@ -8,7 +8,6 @@
 #ifndef util_h
 #define util_h
 
-#include "properties.h"
 #include <iostream>
 #include <random>
 #include <sstream>

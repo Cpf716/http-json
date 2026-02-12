@@ -7,66 +7,29 @@
 
 #include "http.h"
 #include "json.h"
+#include "logger.h"
+#include "service.h"
 #include "socket.h"
 #include "url.h"
+#include <any>
 
 using namespace http;
 using namespace json;
 using namespace mysocket;
 using namespace std;
 
-// Typedef
-
-struct service {
-    // Member Functions
-
-    string greeting(header::map headers, class request request) {
-        try {
-            object* options = parse(request.body());
-            object* first_name = options->get("firstName");
-            object* last_name = options->get("lastName");
-            
-            if (first_name == NULL || first_name->value().empty())
-                throw std::runtime_error("missing required parameter 'firstName'");
-            
-            string body = "Hello, " + decode(first_name->value());
-            
-            if (last_name != NULL && last_name->value().length())
-                body += " " + decode(last_name->value());
-            
-            body += "!";
-
-            headers["Content-Type"] = string("text/plain; charset=utf-8");
-            
-            return response(body, headers);
-        } catch (std::exception e) {
-            headers["Content-Type"] = string("application/json");
-            
-            return response(stringify(new object((vector<object*>){
-                new object("message", encode(e.what())),
-                new object("status", to_string(400))
-            })), headers);
-        }
-    }
-
-    string ping(header::map headers) {
-        headers["Content-Type"] = string("text/plain; charset=utf-8");
-
-        return response("Hello, world!", headers);
-    }
-};
-
 // Non-Member Fields
 
-const size_t PORT = 8080;
-
-atomic<bool> _alive = true;
-set<string>  _allow = { "GET", "HEAD", "PUT", "PATCH", "POST", "DELETE" };
 header::map  _headers = {
+    { "Accept", "application/json" },
     { "Access-Control-Allow-Origin", "*" },
     { "Connection", "keep-alive" },
-    { "Keep-Alive", "" }
+    { "Keep-Alive", 0 },
 };
+
+int          _port = 8080;
+
+atomic<bool> _alive = true;
 mutex        _mutex;
 tcp_server*  _server = NULL;
 service      _service;
@@ -83,74 +46,96 @@ int keep_alive_max() {
     return 200;
 }
 
-set<string> allow() {
-    set<string> temp;
-
+any sync(std::function<any(void)> cb) {
     _mutex.lock();
-
-    temp = _allow;
-
+    
+    any result = cb();
+    
     _mutex.unlock();
+    
+    return result;
+}
 
-    return temp;
+set<string> allow_methods() {
+    return { "GET", "HEAD", "PUT", "PATCH", "POST", "DELETE" };
 }
 
 header::map headers() {
-    header::map temp;
-
-    _mutex.lock();
-
-    temp = _headers;
-
-    _mutex.unlock();
-
-    return temp;
+    return any_cast<header::map>(sync([]() {
+        return _headers;
+    }));
 }
 
 void log_request(class request request) {
-    cout << "url: " << request.url() << ", body: " << (request.body().empty() ? "null" : request.body()) << endl;
+    logger::info("url: " + request.url() + ", body: " + (request.body().empty() ? null() : request.body()));
 }
 
 string handle_request(header::map headers, class request request) {
     auto options = [](header::map headers) {
-        headers["Access-Control-Allow-Methods"] = allow();
+        headers["Access-Control-Allow-Methods"] = allow_methods();
 
-        return response(204, "No Content", "", headers);
+        return response(NO_CONTENT, strstatus(NO_CONTENT), "", headers);
     };
     
-    auto not_found = [request]() {
-        throw http::error(404, "Cannot " + toupperstr(request.method()) + " " + request.url());
-        return "";
+    auto not_found = [request, &headers]() {
+        headers["Content-Type"] = string("text/plain; charset=utf-8");
+        
+        return response(NOT_FOUND, strstatus(NOT_FOUND), "Cannot " + toupperstr(request.method()) + " " + request.url(), headers);
     };
     
     string url = request.url(),
-           prefix = "/api";
+            url_prefix = "/api";
     
-    if (starts_with(url, prefix)) {
-        url = url.substr(prefix.length());
+    if (starts_with(url, url_prefix)) {
+        url = url.substr(url_prefix.length());
         
-        if (url == "/ping") {
-            if (request.method() == "options")
-                return options(headers);
+        if (url == "/greeting") {
+            if (request.method() == "options") {
+                headers["Accept"] = string("application/json");
 
-            if (request.method() == "get") {
-                log_request(request);
-                
-                return _service.ping(headers);
+                return options(headers);
             }
+            
+            auto greeting = [request, headers]() {
+#if LOGGING
+                log_request(request);
+#endif
+
+                return _service.greeting(headers, request);
+            };
+            
+            if (request.method() == "head") {
+                greeting();
+                
+                return response(NO_CONTENT, strstatus(NO_CONTENT), "", headers);
+            }
+
+            if (request.method() == "post")
+                return greeting();
 
             return not_found();
         }
         
-        if (url == "/greeting") {
+        if (url == "/ping") {
             if (request.method() == "options")
                 return options(headers);
-
-            if (request.method() == "post") {
+            
+            auto ping = [request, headers]() {
+#if LOGGING
                 log_request(request);
-
-                return _service.greeting(headers, request);
+#endif
+                
+                return _service.ping(headers);
+            };
+            
+            if (request.method() == "head") {
+                ping();
+                
+                return response(NO_CONTENT, strstatus(NO_CONTENT), "", headers);
             }
+
+            if (request.method() == "get")
+                return ping();
 
             return not_found();
         }
@@ -189,27 +174,23 @@ void onsignal(int signum) {
 }
 
 int main(int argc, const char* argv[]) {
-    int port;
+    if (argc != 1) {
+        _port = parse_int(argv[1]);
 
-    if (argc == 1)
-        port = PORT;
-    else {
-        port = parse_int(argv[1]);
-
-        if (port < 3000)
-            port = PORT;
-    }   
+        if (_port < 3000)
+            _port = 3000;
+    }
 
     initialize();
 
     while (true) {
         try {
-            _server = new tcp_server(port, [](tcp_server::connection* connection) {
+            _server = new tcp_server(_port, [](tcp_server::connection* connection) {
+                // Number of requests received
+                atomic<size_t> nrequests = 0;
+                
                 // Handle request in its own thread
-                thread([connection]() {
-                    // Number of requests received
-                    atomic<size_t> nrequests = 0;
-
+                thread([&nrequests, connection]() {
                     // Set connection timeout
                     thread([&nrequests, connection]() {
                         for (size_t i = 0; i < http::timeout() && !nrequests.load(); i++)
@@ -245,50 +226,44 @@ int main(int argc, const char* argv[]) {
 
                                 if (request_obj.headers()["host"].str().length()) {
                                     auto next = [&]() {
-                                        try {
-                                            string response = handle_request(headers(), request_obj);
+                                        string response = handle_request(headers(), request_obj);
 
-                                            handle_response(response);
+                                        handle_response(response);
 
-                                            size_t nrequest = nrequests.load();
+                                        size_t nrequest = nrequests.load();
 
-                                            if (nrequest >= keep_alive_max()) {
-                                                connection->close();
-                                                
-                                                return true;
-                                            }
-
-                                            // Keep alive
-                                            thread([nrequest, &nrequests, connection]() {
-                                                for (int i = 0; i < keep_alive_timeout() && nrequest == nrequests.load(); i++)
-                                                    this_thread::sleep_for(chrono::milliseconds(1000));
-
-                                                if (nrequest == nrequests.load())
-                                                    connection->close();
-                                            }).detach();
-                                        } catch (http::error& e) {
-                                            handle_response(response(e.status(), e.status_text(), e.text(), headers()));
+                                        if (nrequest >= keep_alive_max()) {
+                                            connection->close();
+                                            
+                                            return true;
                                         }
+
+                                        // Keep alive
+                                        thread([nrequest, &nrequests, connection]() {
+                                            for (int i = 0; i < keep_alive_timeout() && nrequest == nrequests.load(); i++)
+                                                this_thread::sleep_for(chrono::milliseconds(1000));
+
+                                            if (nrequest == nrequests.load())
+                                                connection->close();
+                                        }).detach();
                                         
                                         return false;
                                     };
 
-                                    std::string method = toupperstr(request_obj.method());
+                                    string method = toupperstr(request_obj.method());
                                     
                                     if (method == "OPTIONS") {
                                         if (next())
                                             return;
                                     } else {
-                                        set<string> allow = ::allow();
-                                        
-                                        if (allow.find(method) == allow.end())
-                                            throw http::error(400);
+                                        if (allow_methods().find(method) == allow_methods().end())
+                                            throw http::error(BAD_REQUEST);
                                             
                                         if (next())
                                             return;
                                     }
                                 } else {
-                                    handle_response(response(400, "Bad Request", to_string(0), {
+                                    handle_response(response(BAD_REQUEST, strstatus(BAD_REQUEST), to_string(0), {
                                         { "Connection", "close" },
                                         { "Transfer-Encoding", "chunked "}
                                     }));
@@ -296,7 +271,7 @@ int main(int argc, const char* argv[]) {
                                     return connection->close();
                                 }
                             } catch (http::error& e) {
-                                handle_response(response(400, "Bad Request", e.text(), {
+                                handle_response(response(BAD_REQUEST, strstatus(BAD_REQUEST), e.text(), {
                                     { "Connection", "close" }
                                 }, false));
                         
@@ -316,7 +291,7 @@ int main(int argc, const char* argv[]) {
             signal(SIGINT, onsignal);
             signal(SIGTERM, onsignal);
 
-            cout << "Server listening on port " << port << "...\n";
+            cout << "Server listening on port " << _port << "...\n";
 
             while (_alive.load())
                 continue;
@@ -325,7 +300,7 @@ int main(int argc, const char* argv[]) {
         } catch (mysocket::error& e) {
             // EADDRINUSE
             if (e.errnum() == 48)
-                port++;
+                _port++;
             else
                 throw e;
         }

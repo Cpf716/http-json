@@ -8,6 +8,7 @@
 #ifndef http_h
 #define http_h
 
+#include "logger.h"
 #include "url.h"
 #include "util.h"
 #include <cmath>
@@ -16,16 +17,30 @@
 namespace http {
     // Typedef
 
+    enum status_code {
+        UNKNOWN_ERROR = 0,
+        OK = 200,
+        NO_CONTENT = 204,
+        FOUND = 302,
+        TEMPORARY_REDIRECT = 307,
+        PERMANENT_REDIRECT = 308,
+        BAD_REQUEST = 400,
+        UNAUTHORIZED = 401,
+        NOT_FOUND = 404,
+        INTERNAL_SERVER_ERROR = 500,
+    };
+
+
     struct error: public std::exception {
         // Constructors
 
-        error(const size_t status);
+        error(const status_code status);
 
-        error(const size_t status, const std::string text);
+        error(const status_code status, const std::string text);
 
         // Member Fields
 
-        size_t      status() const;
+        status_code status() const;
 
         std::string status_text() const;
 
@@ -35,7 +50,7 @@ namespace http {
     private:
         // Member Fields
 
-        size_t      _status;
+        status_code _status;
         std::string _status_text;
         std::string _text;
     };
@@ -144,11 +159,13 @@ namespace http {
 
     std::string redirect(header::map& headers, const std::string location);
 
-    std::string redirect(header::map& headers, const size_t status, const std::string location);
+    std::string redirect(header::map& headers, const status_code status, const std::string location);
 
     std::string response(const std::string text, header::map headers);
 
-    std::string response(const size_t status, const std::string status_text, const std::string text, header::map headers, const bool date = true);
+    std::string response(const status_code status, const std::string status_text, const std::string text, header::map headers, const bool date = true);
+
+    std::string strstatus(const status_code status);
 
     size_t      timeout();
 }
