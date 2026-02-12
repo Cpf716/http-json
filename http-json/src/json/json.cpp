@@ -16,7 +16,7 @@ namespace json {
     // Constructors
 
     array::array() {
-        this->type() = array_t;
+        this->type() = ARRAY;
     }
         
     array::array(const std::string key): array() {
@@ -50,11 +50,33 @@ namespace json {
         this->_key = key;
     }
 
-    object::object(std::map<std::string, std::string> options) : object(options["k"], options["v"]) {
-        if (options["t"].length() && this->value().length())
-            throw json::error("Object cannot have both value and values");
+    object::object(std::map<std::string, std::string> options) { 
+        // Map keys to lowercase
+        std::map<std::string, std::string> tmp;
 
-        this->_parse(options["t"]);
+        for (const auto& [key, value]: options)
+            tmp[tolowerstr(key)] = value;
+
+        options = tmp;
+
+        // Map abbreviated keys to their extended values
+        for (const auto& [key, value]: ((std::map<std::string, std::string>) {
+            { "key", "k" },
+            { "text", "t" },
+            { "value", "v" }
+        }))
+            if (options[key].empty() && !options[value].empty())
+                options[key] = options[value];
+
+        this->_key = options["key"];
+        this->_value = options["value"];
+
+        if (options["text"].length()) {
+            if (this->value().length())
+                throw error("Operation not permitted");
+
+            this->_parse(options["text"]);
+        }
     }
 
     object::object(const enum type type) {
@@ -176,14 +198,15 @@ namespace json {
 
         for (; i < this->_values.size(); i++) {
             if (this->_values[i]->key().empty())
-                throw json::error("undefined");
+                throw error("undefined");
 
             this->_key_map.push_back({ this->_values[i]->key(), i });
             this->_values[i]->_map_keys();
         }
 
-        if (this->type() == object_t && this->size())
-            throw json::error("Objects cannot have anonymous properties");
+        if (this->type() == OBJECT && this->size())
+            // Objects cannot have anonymous properties
+            throw error("Operation not permitted");
 
         // Sort by key
         for (int i = 1; i < this->_key_map.size(); i++)
@@ -192,9 +215,6 @@ namespace json {
     }
 
     void object::_parse(const std::string text) {
-        if (text.empty())
-            return;
-
         size_t end = 0,
                start = 0;
 
@@ -249,13 +269,16 @@ namespace json {
     }
 
     object* object::_parse(object* target, std::vector<std::string>& source, const size_t start, const size_t end) {
-        for (size_t i = start; i < end; i++) {
-            if (source[i] == ",")
-                continue;
+        size_t i = start;
+
+        while (i < end) {
+            if (source[i] == ",") {
+                if (i == start || i == end - 1 || source[i + 1] == ",")
+                    throw error("SyntaxError: Unexpected token , in JSON");
+
+                i++;
                 // Anonymous value
-            else if (source[i] == "{") {
-                target->type() = object::object_t;
-                
+            } else if (source[i] == "{") {
                 size_t j,
                        p = 1;
                 
@@ -269,14 +292,17 @@ namespace json {
                         p--;
                     }
                 }
+
+                if (j == end)
+                    throw error("SyntaxError: Unexpected end of JSON input");
+                
+                target->type() = OBJECT;
                 
                 // Parse properties
                 this->_parse(target, source, i + 1, j);
                 
-                i = j;
+                i = j + 1;
             } else if (source[i] == "[") {
-                target->type() = object::array_t;
-                
                 size_t j,
                        p = 1;
                 
@@ -291,37 +317,60 @@ namespace json {
                     }
                 }
 
+                if (j == end)
+                    throw error("SyntaxError: Unexpected end of JSON input");
+
+                target->type() = ARRAY;
+
                 // An array's items must be parsed explicitly, as new objects are otherwise only allocated for named primitives
-                for (size_t k = i + 1; k < j; k++) {
-                    // Named or anonymous values
-                    std::string key;
-                    
-                    if (k != j - 1 && source[k + 1] == ":") {
-                        key = decode(source[k]);
-                        k += 2;
-                    }
-                    
-                    size_t l = k;
-                    
-                    p = 0;
-                    
-                    do {
-                        if (source[l] == "[" || source[l] == "{")
-                            p++;
-                        else if (source[l] == "]" || source[l] == "}")
-                            p--;
+                size_t k = i + 1;
+
+                while (k < j) {
+                    if (source[k] == ",") {
+                        if (k == i + 1 || k == j - 1 || source[k + 1] == ",")
+                            throw error("SyntaxError: Unexpected token , in JSON");
+                            
+                        k++;
+                    } else {
+                        if (source[k] == ":")
+                            throw error("SyntaxError: Unexpected token : in JSON");
+
+                        // Named or anonymous values
+                        std::string key;
                         
-                        l++;
-                    } while (l < j && p);
-                    
-                    target->_values.push_back(this->_parse(new object(key), source, k, l));
-                    
-                    k = l;
+                        if (k != j - 1 && source[k + 1] == ":") {
+                            if (!is_string(source[k]))
+                                throw error("SyntaxError: Unexpected token " + source[k] +  " in JSON");
+
+                            key = decode(source[k]);
+                            k += 2;
+                        }
+                        
+                        size_t l = k;
+                        
+                        p = 0;
+                        
+                        do {
+                            if (source[l] == "[" || source[l] == "{")
+                                p++;
+                            else if (source[l] == "]" || source[l] == "}")
+                                p--;
+                            
+                            l++;
+                        } while (l < j && p);
+                        
+                        target->_values.push_back(this->_parse(new object(key), source, k, l));
+                        
+                        k = l;
+                    }
                 }
 
-                i = j;
+                i = j + 1;
                 // Primitive
             } else if (i != end - 1 && source[i + 1] == ":") {
+                if (!is_string(source[i]))
+                    throw error("SyntaxError: Unexpected token " + source[i] +  " in JSON");
+
                 std::string key = decode(source[i]);
             
                 i += 2;
@@ -339,11 +388,16 @@ namespace json {
                 } while (j < end && p);
                 
                 target->_values.push_back(this->_parse(new object(key), source, i, j));
-                
+
                 i = j;
             } else {
-                target->type() = object::primitive_t;
+                if (source[i] == "}" || source[i] == "]" || source[i] == ":")
+                    throw error("Unexpected token " + source[i] + " in JSON");
+
+                target->type() = PRIMITIVE;
                 target->value() = source[i];
+
+                i++;
             }
         }
         
@@ -361,7 +415,8 @@ namespace json {
 
         for (size_t i = 0; i < values.size(); i++) {
             if (values[i]->key().length())
-                throw json::error("Cannot splice named properties");
+                // Cannot splice named properties
+                throw error("Operation not permitted");
 
             this->_values.insert(this->_values.begin() + start + i, values[i]);
         }
@@ -413,7 +468,7 @@ namespace json {
     }
 
     void object::erase() {
-        this->type() = primitive_t;
+        this->type() = PRIMITIVE;
         this->value().clear();
         this->_key_map.clear();
 
@@ -433,7 +488,7 @@ namespace json {
                 this->_erase(index);
         };
 
-        if (this->type() == array_t) {
+        if (this->type() == ARRAY) {
             int index = parse_int(key);
             
             // Named item
@@ -444,8 +499,8 @@ namespace json {
                 ((array *)this)->get(index)->erase();
             // (Named) property
         } else {
-            if (this->type() != object_t)
-                throw json::error("Operation not permitted");
+            if (this->type() != OBJECT)
+                throw error("Operation not permitted");
 
             _erase();
         }
@@ -460,7 +515,7 @@ namespace json {
     }
 
     object* object::get(const std::string key) {
-        if (this->type() == object::array_t) {
+        if (this->type() == ARRAY) {
             int index = parse_int(key);
             
             if (index == INT_MIN) {
@@ -487,8 +542,8 @@ namespace json {
             }
         }
         
-        if (this->type() != object::object_t)
-            throw json::error("Operation not permitted");
+        if (this->type() != OBJECT)
+            throw error("Operation not permitted");
         
         int index = _find(key);
         
@@ -504,6 +559,10 @@ namespace json {
 
     bool object::null() {
         return this->value() == json::null() && !this->_values.size();
+    }
+
+    double object::number() {
+        return parse_number(this->value());
     }
 
     void object::nullify() {
@@ -585,8 +644,8 @@ namespace json {
     }
 
     json::array* array::splice(int start, int delete_count, const std::vector<object*> values) {
-        if (this->type() != object::array_t)
-            throw json::error("Operation not permitted");
+        if (this->type() != ARRAY)
+            throw error("Operation not permitted");
 
         if (start < 0) {
             start += (int)this->size();
@@ -621,7 +680,7 @@ namespace json {
     }
 
     object* object::set(object* value) {
-        if (this->type() == object::array_t) {
+        if (this->type() == ARRAY) {
             if (value->key().empty()) {
                 this->_values.push_back(value);
                 
@@ -672,11 +731,12 @@ namespace json {
             return value;
         }
 
-        if (this->type() != object::object_t)
-            throw json::error("Operation not permitted");
+        if (this->type() != OBJECT)
+            throw error("Operation not permitted");
 
         if (value->key().empty())
-            throw json::error("Objects cannot have anonymous properties");
+            // Objects cannot have anonymous properties
+            throw error("Operation not permitted");
         
         int index = _find(value->key());
         
@@ -697,12 +757,16 @@ namespace json {
         return this->_values.size() - this->_key_map.size();
     }
 
+    std::string object::string() {
+        return this->value();
+    }
+
     enum object::type& object::type() {
         return this->_type;
     }
 
     bool object::undefined()  {
-        return this->type() == object::primitive_t && this->value().empty();
+        return this->type() == PRIMITIVE && this->value().empty();
     }
 
     std::string& object::value() {
@@ -719,7 +783,7 @@ namespace json {
         std::ostringstream ss;
         
         // Named value
-        if (!value->key().empty())
+        if (value->key().length())
             ss << encode(value->key()) << ":";
 
         if (value->null()) {
@@ -734,34 +798,29 @@ namespace json {
             return ss.str();
         }
         
-        std::string delimiters[2];
-        
-        switch (value->type()) {
-            case object::array_t:
-                delimiters[0] = "[";
-                delimiters[1] = "]";
-                break;
-            case object::object_t:
-                delimiters[0] = "{";
-                delimiters[1] = "}";
-                break;
-            default:
-                break;
-        }
-        
-        ss << delimiters[0];
-     
-        if (value->_values.size()) {
-            size_t i;
+        if (value->type() == object::PRIMITIVE) {
+            if (value->_values.size())
+                throw error("Operation not permitted");
             
-            for (i = 0; i < value->_values.size() - 1; i++)
+            ss << value->value();
+        } else {
+            if (value->value().length())
+                throw error("Operation not permitted");
+            
+            std::pair<std::string, std::string> delimeter =
+                ((std::map<enum object::type, std::pair<std::string, std::string>>) {
+                    { object::ARRAY, { "[", "]" }},
+                    { object::OBJECT, { "{", "}" }}
+                })[value->type()];
+            
+            ss << delimeter.first;
+            
+            for (size_t i = 0; i < value->_values.size() - 1; i++)
                 ss << _stringify(value->_values[i]) << ",";
 
-            ss << _stringify(value->_values[i]);
-        } else
-            ss << value->value();
-        
-        ss << delimiters[1];
+            ss << _stringify(value->_values[value->_values.size() - 1]);
+            ss << delimeter.second;
+        }
             
         return ss.str();
     }
@@ -771,26 +830,26 @@ namespace json {
      */
     object* assign(object* target, object* source) {
         // Target is an array; clear its items
-        if (target->type() == object::array_t) {
-            if (source->type() == object::array_t) {
+        if (target->type() == object::ARRAY) {
+            if (source->type() == object::ARRAY) {
                 for (size_t i = 0; i < source->size(); i++)
                     ((json::array *)target)->set(i, source->_values[i]);
                 // Source is an object; do nothing
             }
             // Target is an object
         } else {
-            if (target->type() != object::object_t)
-                throw json::error("Operation not permitted");
+            if (target->type() != object::OBJECT)
+                throw error("Operation not permitted");
             
             // Source is an array; assign its items' keys by index
             // Cloning is required to mutate keys
             for (size_t i = 0; i < source->size(); i++)
-                target->set(new object({{ "k", std::to_string(i) }, { "t", stringify(((array *)source)->get(i)) }}));
+                target->set(new object({{ "key", std::to_string(i) }, { "text", stringify(((array *)source)->get(i)) }}));
             
             std::vector<object*> values = json::values(source);
     
             for (size_t i = source->size(); i < values.size(); i++)
-                target->set(new object({{ "k", values[i]->key() }, { "t", stringify(values[i]) }}));
+                target->set(new object({{ "key", values[i]->key() }, { "text", stringify(values[i]) }}));
         }
       
         return target;
@@ -808,12 +867,12 @@ namespace json {
     std::vector<std::string> keys(object* value) {
         std::vector<std::string> result;
         
-        if (value->type() == object::primitive_t) {
+        if (value->type() == object::PRIMITIVE) {
             if (!is_number(value->value()))
                 for (size_t i = 0; i < value->value().length(); i++)
                     result.push_back(std::to_string(i));
         } else {
-            if (value->type() == object::array_t)
+            if (value->type() == object::ARRAY)
                 for (size_t i = 0; i < value->size(); i++)
                     result.push_back(std::to_string(i));
 
@@ -831,64 +890,59 @@ namespace json {
     }
 
     object* parse(const std::string text) {
-        return new object({{ "t", text }});
+        return new object({{ "text", text }});
     }
 
     std::string stringify(object* value) {
         if (value->null())
-            throw json::error("null");
+            throw error(null());
 
         if (value->undefined())
-            throw json::error("undefined");
-
-        std::string        delimiters[2];
+            throw error("undefined");
+        
         std::ostringstream ss;
         
-        switch (value->type()) {
-            case object::array_t:
-                delimiters[0] = "[";
-                delimiters[1] = "]";
-                break;
-            case object::object_t:
-                delimiters[0] = "{";
-                delimiters[1] = "}";
-                break;
-            default:
-                break;
-        }
-        
-        ss << delimiters[0];
-     
-        if (value->_values.size()) {
-            size_t i;
-
-            for (i = 0; i < value->_values.size() - 1; i++)
+        if (value->type() == object::PRIMITIVE) {
+            if (value->_values.size())
+                throw error("Operation not permitted");
+            
+            ss << value->value();
+        } else {
+            if (value->value().length())
+                throw error("Operation not permitted");
+            
+            std::pair<std::string, std::string> delimeter =
+                ((std::map<enum object::type, std::pair<std::string, std::string>>) {
+                    { object::ARRAY, { "[", "]" }},
+                    { object::OBJECT, { "{", "}" }}
+                })[value->type()];
+            
+            ss << delimeter.first;
+            
+            for (size_t i = 0; i < value->_values.size() - 1; i++)
                 ss << _stringify(value->_values[i]) << ",";
 
-            ss << _stringify(value->_values[i]);
-        } else
-            ss << value->value();
-        
-        ss << delimiters[1];
+            ss << _stringify(value->_values[value->_values.size() - 1]);
+            
+            ss << delimeter.second;
+        }
             
         return ss.str();
     }
 
-    std::string type_str(object* value) {
+    std::string strtype(object* value) {
         switch (value->type()) {
-            case object::array_t:
+            case object::ARRAY:
                 return "array";
-            case object::object_t:
+            case object::OBJECT:
                 return "object";
-            case object::primitive_t: {
-                if (value->value() == "null")
+            case object::PRIMITIVE: {
+                if (value->value() == null())
                     return "unknown";
 
-                std::string lower_value = value->value();
+                std::string lowerstr = tolowerstr(value->value());
 
-                std::transform(lower_value.begin(), lower_value.end(), lower_value.begin(), ::tolower);
-
-                if (lower_value == "true" || lower_value == "false")
+                if (lowerstr == "true" || lowerstr == "false")
                     return "boolean";
 
                 return is_number(value->value()) ? "number" : "string";
@@ -897,12 +951,12 @@ namespace json {
     }
 
     std::vector<object*> values(object* value) {
-        if (value->type() == object::primitive_t) {
+        if (value->type() == object::PRIMITIVE) {
             std::vector<object*> result;
             
             if (!is_number(value->value()))
                 for (char c: decode(value->value()))
-                    result.push_back(new object({{ "v", encode(std::string((char[]){ c, '\0' })) }}));
+                    result.push_back(new object({{ "value", encode(std::string((char[]){ c, '\0' })) }}));
             
             return result;
         }

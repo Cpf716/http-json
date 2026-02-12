@@ -29,11 +29,11 @@ namespace json {
         std::string _what;
     };
 
-    struct object {        
-        // Typdef
-
-        enum type { array_t, object_t, primitive_t };
-
+    struct object {
+        // Typedef
+        
+        enum type { ARRAY, OBJECT, PRIMITIVE };
+        
         // Constructors
         
         object();
@@ -54,7 +54,7 @@ namespace json {
         
         object(const std::string key, const std::string value);
 
-        object(const std::vector<object*> values, const enum type type = object_t);
+        object(const std::vector<object*> values, const enum type type = OBJECT);
 
         ~object();
 
@@ -85,6 +85,8 @@ namespace json {
         bool                 null();
 
         void                 nullify();
+
+        double               number();
                 
         /**
          * Delete undefined properties
@@ -101,7 +103,9 @@ namespace json {
          */
         size_t               size();
 
-        type&                type();
+        std::string          string();
+
+        enum type&           type();
         
         bool                 undefined();
 
@@ -125,7 +129,7 @@ namespace json {
         // Member Fields
         
         std::vector<std::pair<std::string, size_t>> _key_map;
-        enum type                                   _type = primitive_t;
+        enum type                                   _type = PRIMITIVE;
         std::string                                 _value;
         
         // Member Functions
@@ -262,7 +266,7 @@ namespace json {
 
     std::string                                  stringify(object* value);
 
-    std::string                                  type_str(object* value);
+    std::string                                  strtype(object* value);
 
     std::vector<object*>                         values(object* value);
 }
