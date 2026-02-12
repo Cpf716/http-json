@@ -13,8 +13,7 @@ fetch('http://localhost:8080/api/greeting', {
         'content-type': 'application/json'
     }
 }).then(response =>
-    response.text().then(value => console.log(value))
+    response.json().then(value => console.log(value))
 ).catch(err => {
     throw err;
 })
-    
