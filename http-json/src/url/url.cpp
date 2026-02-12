@@ -61,7 +61,7 @@ url::url() {
 url::url(const std::string value) {
     int start = 0;
 
-    while (start < (int)value.length() - 1 && (value[start] != '/' || value[start + 1] != '/'))
+    while (start < (int) value.length() - 1 && (value[start] != '/' || value[start + 1] != '/'))
         start++;
 
     if (start == value.length() - 1)
@@ -161,6 +161,10 @@ bool url::param::operator!=(const double value) {
 
 bool url::param::operator!=(const std::string value) {
     return !(*this == value);
+}
+
+url::portinfo::operator int() {
+    return this->value();
 }
 
 // Member Functions

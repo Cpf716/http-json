@@ -113,6 +113,10 @@ struct url {
         // Typdef
         
         friend url;
+
+        // Operators
+
+        operator int();
         
         // Member Functions
 
