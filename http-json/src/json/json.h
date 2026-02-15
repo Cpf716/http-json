@@ -63,57 +63,57 @@ namespace json {
         /**
          * Set undefined
          */
-        void                 erase();
+        void         erase();
 
         /**
          * Set item undefined
          */
-        void                 erase(const size_t index);
+        void         erase(const size_t index);
         
         /**
          * Delete property
          */
-        void                 erase(const std::string key);
+        void         erase(const std::string key);
 
         /**
          * Return property if it exists, otherwise return NULL
          */
-        object*              get(std::string key);
+        object*      get(std::string key);
 
-        std::string          key();
+        std::string  key();
 
-        bool                 null();
+        bool         null();
 
-        void                 nullify();
+        void         nullify();
 
-        double               number();
+        double       number();
                 
         /**
          * Delete undefined properties
          */
-        object*              sanitize();
+        object*      sanitize();
 
         /**
          * Set array item or object property and return it
          */
-        object*              set(object* value);
+        object*      set(object* value);
         
         /**
          * Return array size
          */
-        size_t               size();
+        size_t       size();
 
-        std::string          string();
+        std::string  string();
 
-        enum type&           type();
+        enum type&   type();
         
-        bool                 undefined();
+        bool         undefined();
 
-        std::string&         value();
+        std::string& value();
 
         // Non-Member Functions
 
-        friend std::string          _stringify(object* value);
+        friend std::string          __stringify(object* value);
 
         friend object*              assign(object* target, object* source);
 
@@ -134,26 +134,26 @@ namespace json {
         
         // Member Functions
 
-        void                                         _erase(const size_t index);
+        void    _erase(const size_t index);
 
         /**
          * Perform binary search and return the relative index of key
          */
-        int                                          _find(const std::string key);
+        int     _find(const std::string key);
         
-        int                                          _find(const std::string key, const int start, const int end);
+        int     _find(const std::string key, const int start, const int end);
 
         /**
          * Build key map
          */
-        void                                         _map_keys();
+        void    _map_keys();
 
         /**
          * Parse JSON string to object
          */
-        void                                         _parse(const std::string text);
+        void    _parse(const std::string text);
         
-        object*                                      _parse(object* target, std::vector<std::string>& source, const size_t start, const size_t end);
+        object* _parse(object* target, std::vector<std::string>& source, const size_t start, const size_t end);
     };
 
     class array: public object {
