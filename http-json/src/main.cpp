@@ -11,7 +11,6 @@
 #include "service.h"
 #include "socket.h"
 #include "url.h"
-#include <any>
 
 using namespace http;
 using namespace json;
@@ -46,10 +45,10 @@ int keep_alive_max() {
     return 200;
 }
 
-any sync(std::function<any(void)> cb) {
+auto sync(auto cb) {
     _mutex.lock();
     
-    any result = cb();
+    auto result = cb();
     
     _mutex.unlock();
     
@@ -61,9 +60,9 @@ set<string> allow_methods() {
 }
 
 header::map headers() {
-    return any_cast<header::map>(sync([]() {
+    return sync([]() {
         return _headers;
-    }));
+    });
 }
 
 void log_request(class request request) {
@@ -148,12 +147,12 @@ string handle_request(header::map headers, class request request) {
 
 void initialize() {
     // Preserve comma-separated header values' order
-    vector<string> ka = { join({ "timeout", to_string(keep_alive_timeout()) }, "=") };
+    vector<string> keep_alive = { join({ "timeout", to_string(keep_alive_timeout()) }, "=") };
 
     if (keep_alive_max() > 0)
-        ka.push_back(join({ "max", to_string(keep_alive_max()) }, "="));
+        keep_alive.push_back(join({ "max", to_string(keep_alive_max()) }, "="));
 
-    _headers["Keep-Alive"] = join(ka, ",");
+    _headers["Keep-Alive"] = join(keep_alive, ",");
 }
 
 // Perform garbage collection
@@ -211,12 +210,12 @@ int main(int argc, const char* argv[]) {
                             if (request.empty())
                                 continue;
 
+                            logger::debug(request);
+
                             nrequests.fetch_add(1);
 
                             auto handle_response = [connection](const string response) {
-#if LOGGING == LEVEL_DEBUG
-                                cout << response << endl;
-#endif
+                                logger::debug(response);
 
                                 connection->send(response);
                             };

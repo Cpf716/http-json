@@ -30,7 +30,6 @@ namespace http {
         INTERNAL_SERVER_ERROR = 500,
     };
 
-
     struct error: public std::exception {
         // Constructors
 
