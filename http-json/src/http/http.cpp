@@ -48,10 +48,6 @@ namespace http {
     }
 
     request parse_request(const std::string message) {
-#if LOGGING == LEVEL_DEBUG
-        std::cout << message << std::endl;
-#endif
-
         std::istringstream iss(message);
         std::string        str;
 
