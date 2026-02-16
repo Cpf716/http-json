@@ -283,6 +283,9 @@ namespace json {
     }
 
     object* parse(const std::string text) {
+        if (text.empty())
+            throw error("Unexpected end of JSON input");
+            
         return new object({{ "text", text }});
     }
 
