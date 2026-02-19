@@ -162,7 +162,7 @@ namespace http {
 
     std::string response(const std::string text, header::map headers);
 
-    std::string response(const status_code status, const std::string status_text, const std::string text, header::map headers, const bool date = true);
+    std::string response(const status_code status, const std::string text, header::map headers, const bool date = true);
 
     std::string strstatus(const status_code status);
 

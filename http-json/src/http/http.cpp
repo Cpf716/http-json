@@ -49,11 +49,11 @@ namespace http {
 
     request parse_request(const std::string message) {
         std::istringstream iss(message);
-        std::string        str;
+        std::string        line;
 
-        getline(iss, str);
+        getline(iss, line);
 
-        std::vector<std::string> tokens = ::tokens(str);
+        std::vector<std::string> tokens = ::tokens(line);
 
         if (!(tokens.size() == 3 && tokens[2] == http_version()))
             throw http::error(BAD_REQUEST);
@@ -62,26 +62,26 @@ namespace http {
                      target = tokens[1];
         header::map headers;
 
-        while (getline(iss, str)) {
-            std::vector<std::string> header = split(str, ":");
+        while (getline(iss, line)) {
+            std::vector<std::string> header = split(line, ":");
 
             if (header.size() == 1)
                 break;
 
-            headers[tolowerstr(header[0])] = trim(str.substr(header[0].length() + 1));
+            headers[tolowerstr(header[0])] = trim(line.substr(header[0].length() + 1));
         }
 
-        int         content_length = headers["content-length"];
+        auto        it = headers.find("content-length");
         std::string body = "";
 
-        if (content_length != INT_MIN) {
+        if (it != headers.end()) {
             std::vector<std::string> value;
 
-            while (getline(iss, str))
-                value.push_back(trim_end(str));
+            while (getline(iss, line))
+                value.push_back(trim_end(line));
 
             body = join(value, "\r\n");
-            body = body.substr(0, std::min((int) body.length(), content_length));
+            body = body.substr(0, std::min((int) body.length(), (int) (* it).second));
         }
 
         return request(method, target, headers, body);
@@ -90,9 +90,7 @@ namespace http {
     std::string redirect(header::map& headers, const status_code status, const std::string location) {
         headers["Location"] = location;
 
-        std::string status_text = strstatus(status);
-
-        return response(status, status_text, status_text + ". Redirecting to " + location, headers);
+        return response(status, strstatus(status) + ". Redirecting to " + location, headers);
     }
 
     std::string redirect(header::map& headers, const std::string location) {
@@ -100,15 +98,15 @@ namespace http {
     }
 
     std::string response(const std::string text, header::map headers) {
-        return response(OK, strstatus(OK), text, headers);
+        return response(OK, text, headers);
     }
 
-    std::string response(const status_code status, const std::string status_text, const std::string text, header::map headers, const bool date) {
-        std::ostringstream oss(http_version() + " ");
+    std::string response(const status_code status, const std::string text, header::map headers, const bool date) {
+        std::ostringstream ss(http_version() + " ");
 
-        oss.seekp(0, std::ios::end);
+        ss.seekp(0, std::ios::end);
 
-        oss << std::to_string(status) << " " << status_text << "\r\n";
+        ss << std::to_string(status) << " " << strstatus(status) << "\r\n";
 
         // Response headers
         if (date) {
@@ -118,7 +116,7 @@ namespace http {
             
             std::vector<std::string> tokens = ::tokens(std::string(dt));
 
-            oss << "Date" << ": ";
+            ss << "Date" << ": ";
 
             std::string day = tokens[0],
                          month = tokens[1],
@@ -126,40 +124,38 @@ namespace http {
                          time = tokens[3],
                          year = tokens[4];
 
-            oss << day << ", " << date << " " << month << " " << year << " " << time << " GMT";
+            ss << day << ", " << date << " " << month << " " << year << " " << time << " GMT";
         }
 
         for (const auto& [key, value]: headers) {
-            oss << "\r\n";
-            oss << key << ": " << value.str();
+            ss << "\r\n";
+            ss << key << ": " << value.str();
         }
         
         if (text.length()) {
-            if (headers["Transfer-Encoding"].str().empty()) {
-                headers.erase("Transfer-Encoding");
-                
-                oss << "\r\n";
-                oss << "Content-Length: " << text.length();
+            if (headers.find("Transfer-Encoding") == headers.end()) {
+                ss << "\r\n";
+                ss << "Content-Length: " << text.length();
             }
 
-            oss << "\r\n\r\n";
-            oss << text;
+            ss << "\r\n\r\n";
+            ss << text;
         }
         
-        return oss.str();
+        return ss.str();
     }
 
     // Constructors
 
     error::error(const status_code status) {
         this->_status = status;
-        this->_status_text = strstatus(static_cast<status_code>(this->status()));
+        this->_status_text = strstatus(this->status());
         this->_text = "";
     }
 
     error::error(const status_code status, const std::string text) {
         this->_status = status;
-        this->_status_text = strstatus(static_cast<status_code>(this->status()));
+        this->_status_text = strstatus(this->status());
         this->_text = text;
     }
 

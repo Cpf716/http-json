@@ -52,13 +52,42 @@ url::portinfo::portinfo(const int value, const bool typed) {
     this->_typed = typed;
 }
 
+url::query_string::query_string() { }
+
+url::query_string::query_string(param::map params) {
+    this->_params = params;
+}
+
+url::query_string::query_string(const std::string value) {
+    if (value.empty())
+        throw error("Unexpected end of URL input");
+
+    std::vector<std::string> query = split(value, "&");
+
+    for (std::string param: query) {
+        std::vector<std::string> tokens = split(param, "=");
+
+        if (tokens.size() >= 3)
+            throw error("Unexpected token = in URL");
+        
+        this->_params[tokens[0]] = tokens.size() == 1 ? "" : tokens[1];
+    }
+}
+
 url::url() {
     this->_host = "";
     this->_protocol = "";
     this->_target = "";
 }
 
-url::url(const std::string value) {
+url::url(std::string value) {
+    std::vector<std::string> target = split(value, "?");
+    
+    if (target.size() >= 3 || target[0].empty())
+        throw url::error("Unexpected token ? in URL");
+        
+    value = target[0];
+        
     int start = 0;
 
     while (start < (int) value.length() - 1 && (value[start] != '/' || value[start + 1] != '/'))
@@ -68,7 +97,7 @@ url::url(const std::string value) {
         start = 0;
     else {
         if (start)
-            this->_protocol = tolowerstr(value.substr(0, start - 1));
+            this->protocol() = tolowerstr(value.substr(0, start - 1));
 
         start += 2;
     }
@@ -77,32 +106,18 @@ url::url(const std::string value) {
 
     while (end < value.length() && value[end] != '/')
         end++;
-
+    
     std::vector<std::string> host = split(value.substr(start, end - start), ":");
 
-    this->_host = host[0];
+    if (host.size() >= 3)
+        throw url::error("Unexpected token : in URL");
 
-    if (host.size() == 1)
-        this->port() = portinfo(protocols()[this->protocol()], false);
-    else
-        this->port() = portinfo(parse_int(host[1]), true);
+    this->host() = host[0];
+    this->port() = host.size() == 1 ? portinfo(protocols()[this->protocol()], false) : portinfo(parse_int(host[1]), true);
+    this->target() = value.substr(end);
 
-    std::vector<std::string> target = split(value.substr(end), "?");
-
-    if (target.size() > 2)
-        throw url::error("Unexpected token: ?");
-
-    this->_target = target[0];
-
-    if (target.size() == 2) {
-        std::vector<std::string> query = split(target[1], "&");
-
-        for (std::string param: query) {
-            std::vector<std::string> tokens = split(param, "=");
-            
-            this->_params[tokens[0]] = tokens.size() == 1 ? "" : tokens[1];
-        }
-    }
+    if (target.size() == 2)
+        this->params() = query_string(target[1]).params();
 }
 
 // Operators
@@ -169,45 +184,8 @@ url::portinfo::operator int() {
 
 // Member Functions
 
-std::string url::_query(std::ostringstream& oss) {
-    size_t               index = 0;
-    param::map::iterator it = this->params().begin();
-
-    for (; index < this->params().size() - 1 && it != this->params().end(); index++, it++)
-        oss << (* it).first << "=" << (* it).second.str() << "&";
-
-
-    oss << (* it).first << "=" << (* it).second.str();
-        
-    return oss.str();
-}
-
-std::string& url::host() {
-    return this->_host;
-}
-
-url::param::map& url::params() {
-    return this->_params;
-}
-
-std::string& url::protocol() {
-    return this->_protocol;
-}
-
-url::portinfo& url::port() {
-    return this->_port;
-}
-
-std::string& url::target() {
-    return this->_target;
-}
-
-bool& url::portinfo::typed() {
-    return this->_typed;
-}
-
-int& url::portinfo::value() {
-    return this->_value;
+const char* url::error::what() const throw() {
+    return this->_what.c_str();
 }
 
 double url::param::_set(const double value) {
@@ -249,28 +227,78 @@ std::string url::param::str() const {
     return this->_str;
 }
 
-std::string url::str() {
-    std::ostringstream oss;
-
-    if (this->protocol().length())
-        oss << this->protocol() << "://";
-
-    oss << this->host();
-
-    if (this->port().typed())
-        oss << ":" << this->port().value();
-
-    oss << this->target();
-
-    if (this->params().size()) {
-        oss << "?";
-
-        this->_query(oss);
-    }
-
-    return oss.str();
+bool& url::portinfo::typed() {
+    return this->_typed;
 }
 
-const char* url::error::what() const throw() {
-    return this->_what.c_str();
+int& url::portinfo::value() {
+    return this->_value;
+}
+
+url::param::map& url::query_string::params() {
+    return this->_params;
+}
+
+std::string url::query_string::str() {
+    std::ostringstream ss;
+
+    if (this->params().size()) {
+        size_t               index = 0;
+        param::map           params = this->params();
+        param::map::iterator it = params.begin();
+
+        for (; index < params.size() - 1; index++, it++)
+            ss << (* it).first << "=" << (* it).second.str() << "&";
+
+        ss << (* it).first << "=" << (* it).second.str();
+    }
+    
+    return ss.str();
+}
+
+std::string url::fully_qualified_host() {
+    std::string host = this->host();
+
+    if (this->port().typed())
+        host += ":" + std::to_string((int) this->port());
+
+    return host;
+}
+
+std::string& url::host() {
+    return this->_host;
+}
+
+url::param::map& url::params() {
+    return this->_params;
+}
+
+std::string& url::protocol() {
+    return this->_protocol;
+}
+
+url::portinfo& url::port() {
+    return this->_port;
+}
+
+std::string url::query() {
+    return query_string(this->params()).str();
+}
+
+std::string& url::target() {
+    return this->_target;
+}
+
+std::string url::str() {
+    std::ostringstream ss;
+
+    if (this->protocol().length())
+        ss << this->protocol() << "://";
+
+    ss << this->fully_qualified_host() << this->target();
+
+    if (this->params().size())
+        ss << "?" << this->query();
+
+    return ss.str();
 }

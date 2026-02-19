@@ -7,24 +7,36 @@
 
 #include "logger.h"
 
-namespace logger {
-    void _write(const std::string message) {
-        std::cout << message << std::endl;
-    }
+// Constructors
 
-    void debug(const std::string message) {
-#if LOGGING == LEVEL_DEBUG
+logger::logger() : logger(INFO) { }
+
+logger::logger(const enum logging logging) {
+    this->_logging = logging;
+}
+
+// Non-Member Functions
+
+void _write(const std::string message) {
+    std::cout << message << std::endl;
+}
+
+// Member Functions
+
+void logger::error(const std::string message) {
+    _write("Error - " + message);
+}
+
+void logger::extended(const std::string message) {
+    if (this->logging() == EXTENDED)
         _write(message);
-#endif
-    }
+}
 
-    void error(const std::string message) {
-        _write("Error - " + message);
-    }
-
-    void info(const std::string message) {
-#if LOGGING >= LEVEL_INFO
+void logger::info(const std::string message) {
+    if (this->logging() >= INFO)
         _write(message);
-#endif
-    }
+}
+
+enum logging& logger::logging() {
+    return this->_logging;
 }

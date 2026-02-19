@@ -7,6 +7,16 @@
 
 #include "service.h"
 
+// Constructors
+
+service::service() { }
+
+service::service(class logger logger) {
+    this->_logger = logger;
+}
+
+// Member Functions
+
 string service::greeting(header::map headers, class request request) {
     headers["Content-Type"] = string("application/json");
     
@@ -54,13 +64,13 @@ string service::greeting(header::map headers, class request request) {
         
         return response(encode(result), headers);
     } catch (std::exception& e) {
-        logger::error(e.what());
+        this->_logger.error(e.what());
         
-        return response(BAD_REQUEST, strstatus(BAD_REQUEST), stringify(new object((vector<object*>){
-                new object("message", encode(e.what())),
-                new object("status", to_string(BAD_REQUEST))
-            }
-        )), headers);
+        return response(BAD_REQUEST,
+                        stringify(new object((vector<object*>){
+                            new object("message", encode(e.what()))
+                        })),
+                        headers);
     }
 }
 
