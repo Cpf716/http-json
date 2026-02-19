@@ -16,7 +16,19 @@ using namespace http;
 using namespace json;
 using namespace std;
 
-struct service {
+class service {
+    // Member Fields
+
+    logger _logger;
+public:
+    // Constructors
+
+    service();
+
+    service(class logger logger);
+
+    // Member Functions
+
     string greeting(header::map headers, class request request);
     
     string ping(header::map headers);

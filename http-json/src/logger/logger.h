@@ -10,19 +10,34 @@
 
 #include <iostream>
 
-#define LEVEL_OFF 0
-#define LEVEL_INFO 1
-#define LEVEL_ERROR 2
-#define LEVEL_DEBUG 3
+// Typedef
 
-#define LOGGING LEVEL_INFO
+enum logging { NONE, INFO, EXTENDED };
 
-namespace logger {
-    void debug(const std::string message);
+class logger {
+    // Member Fields
 
-    void error(const std::string message);
+    logging _logging;
+public:
+    // Constructors
 
-    void info(const std::string message);
-}
+    logger();
+
+    logger(const enum logging logging);
+
+    // Member Functions
+
+    void          error(const std::string message);
+
+    void          extended(const std::string message);
+
+    void          info(const std::string message);
+
+    enum logging& logging();
+};
+
+// Non-Member Functions
+
+// void _write(const std::string message);
 
 #endif /* logger_h */

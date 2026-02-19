@@ -117,16 +117,16 @@ bool is_string(const std::string value)  {
 }
 
 std::string join(std::vector<std::string> values, std::string delimeter) {
-    std::ostringstream oss;
+    std::ostringstream ss;
 
     if (values.size()) {
         for (size_t i = 0; i < values.size() - 1; i++)
-            oss << values[i] << delimeter;
+            ss << values[i] << delimeter;
 
-        oss << values[values.size() - 1];
+        ss << values[values.size() - 1];
     }
 
-    return oss.str();
+    return ss.str();
 }
 
 void merge(std::vector<std::string>& values, const std::string delimiter) {
@@ -337,10 +337,7 @@ double parse_number(const std::string value) {
 }
 
 int pow2(const int b) {
-    if (b == 0)
-        return 1;
-    
-    return pow(2, ceil(log(b) / log(2)));
+    return b == 0 ? 1 : pow(2, ceil(log(b) / log(2)));
 }
 
 std::vector<std::string> split(const std::string string, const std::string delimeter) {
@@ -385,12 +382,15 @@ void split(std::vector<std::string>& target, const std::string source, const std
 }
 
 bool starts_with(const std::string text, const std::string pattern) {
-    int i = 0;
-    
-    while (i < text.length() && i < pattern.length() && text[i] == pattern[i])
-        i++;
-    
-    return i == pattern.length();
+    if (text.length() < pattern.length())
+        return false;
+
+    size_t index = 0;
+
+    while (index < pattern.length() && text[index] == pattern[index])
+        index++;
+
+    return index == pattern.length();
 }
 
 std::vector<std::string> tokens(const std::string string) {

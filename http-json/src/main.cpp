@@ -24,62 +24,38 @@ header::map  _headers = {
     { "Access-Control-Allow-Origin", "*" },
     { "Connection", "keep-alive" },
     { "Keep-Alive", 0 },
+    { "X-Powered-By", "http-json" }
 };
 
 int          _port = 8080;
 
 atomic<bool> _alive = true;
+logger       _logger;
 mutex        _mutex;
 tcp_server*  _server = NULL;
 service      _service;
 
 // Non-Member Functions
 
-// HTTP/1.1 default
-size_t keep_alive_timeout() {
-    return 5;
-}
-
-// Optional; assign a value < 0 to disable
-int keep_alive_max() {
-    return 200;
-}
-
-auto sync(auto cb) {
-    _mutex.lock();
-    
-    auto result = cb();
-    
-    _mutex.unlock();
-    
-    return result;
-}
-
 set<string> allow_methods() {
     return { "GET", "HEAD", "PUT", "PATCH", "POST", "DELETE" };
 }
 
-header::map headers() {
-    return sync([]() {
-        return _headers;
-    });
-}
-
 void log_request(class request request) {
-    logger::info("url: " + request.url() + ", body: " + (request.body().empty() ? null() : request.body()));
+    _logger.info("url: " + request.url() + ", body: " + (request.body().empty() ? null() : request.body()));
 }
 
 string handle_request(header::map headers, class request request) {
     auto options = [](header::map headers) {
         headers["Access-Control-Allow-Methods"] = allow_methods();
 
-        return response(NO_CONTENT, strstatus(NO_CONTENT), "", headers);
+        return response(NO_CONTENT, "", headers);
     };
     
     auto not_found = [request, &headers]() {
         headers["Content-Type"] = string("text/plain; charset=utf-8");
         
-        return response(NOT_FOUND, strstatus(NOT_FOUND), "Cannot " + toupperstr(request.method()) + " " + request.url(), headers);
+        return response(NOT_FOUND, "Cannot " + toupperstr(request.method()) + " " + request.url(), headers);
     };
     
     string url = request.url(),
@@ -96,9 +72,7 @@ string handle_request(header::map headers, class request request) {
             }
             
             auto greeting = [request, headers]() {
-#if LOGGING
                 log_request(request);
-#endif
 
                 return _service.greeting(headers, request);
             };
@@ -106,7 +80,7 @@ string handle_request(header::map headers, class request request) {
             if (request.method() == "head") {
                 greeting();
                 
-                return response(NO_CONTENT, strstatus(NO_CONTENT), "", headers);
+                return response(NO_CONTENT, "", headers);
             }
 
             if (request.method() == "post")
@@ -120,9 +94,7 @@ string handle_request(header::map headers, class request request) {
                 return options(headers);
             
             auto ping = [request, headers]() {
-#if LOGGING
                 log_request(request);
-#endif
                 
                 return _service.ping(headers);
             };
@@ -130,7 +102,7 @@ string handle_request(header::map headers, class request request) {
             if (request.method() == "head") {
                 ping();
                 
-                return response(NO_CONTENT, strstatus(NO_CONTENT), "", headers);
+                return response(NO_CONTENT, "", headers);
             }
 
             if (request.method() == "get")
@@ -143,6 +115,32 @@ string handle_request(header::map headers, class request request) {
     }
 
     return not_found();
+}
+
+auto sync(auto cb) {
+    _mutex.lock();
+    
+    auto result = cb();
+    
+    _mutex.unlock();
+    
+    return result;
+}
+
+header::map headers() {
+    return sync([]() {
+        return _headers;
+    });
+}
+
+// Optional; assign a value < 0 to disable
+int keep_alive_max() {
+    return 200;
+}
+
+// HTTP/1.1 default
+size_t keep_alive_timeout() {
+    return 5;
 }
 
 void initialize() {
@@ -161,26 +159,34 @@ void onsignal(int signum) {
         cout << endl;
         cout << "Stop? (y/N) ";
 
-        string str;
+        string line;
 
-        getline(cin, str);
+        getline(cin, line);
 
-        if (tolowerstr(str) == "y") {
+        if (tolowerstr(line) == "y") {
             _server->close();
             _alive.store(false);
         }
     }).detach();
 }
 
-int main(int argc, const char* argv[]) {
-    if (argc != 1) {
-        _port = parse_int(argv[1]);
+enum logging parse_logging(const std::string value) {
+    int index = ((map<string, int>) {
+        { "none", 1 },
+        { "info", 2 },
+        { "extended", 3 }
+    })[value] - 1;
+    
+    return index == -1 ? INFO : static_cast<enum logging>(index);
+}
 
-        if (_port < 3000)
-            _port = 3000;
-    }
+int main(int argc, const char* argv[]) {
+    _logger.logging() = argc == 1 ? INFO : parse_logging(argv[1]);
+    _service = service(_logger);
 
     initialize();
+
+    bool flag = true;
 
     while (true) {
         try {
@@ -210,12 +216,12 @@ int main(int argc, const char* argv[]) {
                             if (request.empty())
                                 continue;
 
-                            logger::debug(request);
+                            _logger.extended(request + "\r\n");
 
                             nrequests.fetch_add(1);
 
                             auto handle_response = [connection](const string response) {
-                                logger::debug(response);
+                                _logger.extended(response + "\r\n");
 
                                 connection->send(response);
                             };
@@ -262,7 +268,7 @@ int main(int argc, const char* argv[]) {
                                             return;
                                     }
                                 } else {
-                                    handle_response(response(BAD_REQUEST, strstatus(BAD_REQUEST), to_string(0), {
+                                    handle_response(response(BAD_REQUEST, to_string(0), {
                                         { "Connection", "close" },
                                         { "Transfer-Encoding", "chunked "}
                                     }));
@@ -270,7 +276,7 @@ int main(int argc, const char* argv[]) {
                                     return connection->close();
                                 }
                             } catch (http::error& e) {
-                                handle_response(response(BAD_REQUEST, strstatus(BAD_REQUEST), e.text(), {
+                                handle_response(response(BAD_REQUEST, e.text(), {
                                     { "Connection", "close" }
                                 }, false));
                         
@@ -295,12 +301,25 @@ int main(int argc, const char* argv[]) {
             while (_alive.load())
                 continue;
 
-            break;
+            return 0;
         } catch (mysocket::error& e) {
             // EADDRINUSE
-            if (e.errnum() == 48)
+            if (e.errnum() == 48) {
+                if (flag) {
+                    cout << "Port " << _port << " is already in use. Use a different port? (Y/n) ";
+
+                    string line;
+
+                    getline(cin, line);
+
+                    if (tolowerstr(line) != "y")
+                        return 0;
+
+                    flag = false;
+                }
+
                 _port++;
-            else
+            } else
                 throw e;
         }
     }
