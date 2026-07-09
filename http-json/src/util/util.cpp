@@ -198,18 +198,18 @@ std::string decode(const std::string string) {
         return string;
 
     // Find opening double quotations
-    size_t l = 0;
+    int l = 0;
     
-    while (l < string.length() - 1 && (string[l] == '\\' || string[l] != '\"'))
+    while (l < string.length() && string[l] != '\"')
         l++;
     
-    // None found; return string
-    if (l == string.length() - 1)
+    // None found; return identity
+    if (l == string.length())
         return string;
 
     // Copy string
-    size_t len = string.length() + 1;
-    char*  str = new char[len];
+    int   len = (int)string.length() + 1;
+    char* str = new char[len];
     
     strcpy(str, string.c_str());
     
@@ -220,40 +220,33 @@ std::string decode(const std::string string) {
     len--;
     
     // Find closing double quotations
-    size_t r = l;
+    int r = l;
 
     while (r < len - 2 && (str[r] == '\\' || str[r + 1] != '\"'))
         r++;
 
-    // None found
-    if (r == len - 2) {
-        for (size_t i = l; i < len - 2; i++) {
-            if (str[i] == '\\' && str[i + 1] == '\"') {
-                for (size_t j = i; j < len - 1; j++)
-                    std::swap(str[j], str[j + 1]);
-                
-                len--;
-                i++;
-            }
-        }
-    } else {
+    if (r < len - 2 && str[r + 1] == '\"')
+        r++;
+
+    if (r < len - 1) {
         // Erase closing double quotations
-        for (size_t i = ++r; i < len - 1; i++)
+        for (size_t i = r; i < len - 1; i++)
             std::swap(str[i], str[i + 1]);
 
         len--;
 
-        for (size_t i = l; i < r - 1; i++) {
+        // Escape applicable double quotations
+        for (int i = l; i < r - 1; i++) {
             if (str[i] == '\\' && str[i + 1] == '\"') {
                 for (size_t j = i; j < len - 1; j++)
                     std::swap(str[j], str[j + 1]);
                     
                 len--;
                 r--;
-                i++;
             }
         }
 
+        // Erase extranous double quotations
         while (r < len - 2) {
             if (str[r] == '\\' && str[r + 1] == '\"') {
                 for (size_t j = 0; j < 2; j++) {
@@ -264,6 +257,18 @@ std::string decode(const std::string string) {
                 }
             } else
                 r++;
+        }
+        // None found
+    } else {
+        // Escape double quotations
+        for (size_t i = l; i < len - 2; i++) {
+            if (str[i] == '\\' && str[i + 1] == '\"') {
+                for (size_t j = i; j < len - 1; j++)
+                    std::swap(str[j], str[j + 1]);
+                
+                len--;
+                i++;
+            }
         }
     }
 
@@ -291,7 +296,7 @@ std::string encode(const std::string string) {
     // Escape double quotations
     for (size_t i = 1; i < len - 1; i++) {
         if (str[i] == '\"') {
-            // resize, if required
+            // Resize, as required
             if (is_pow(len + 2, 2)) {
                 char* tmp = new char[pow2((int) (len + 2) * 2)];
 
